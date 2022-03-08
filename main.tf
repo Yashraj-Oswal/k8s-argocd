@@ -1,9 +1,9 @@
 data "kubectl_file_documents" "namespace" {
-    content = file("../kubernetes-argocd/manifests/argocd/namespace.yaml")
+    content = file("manifests/argocd/namespace.yaml")
 } 
 
 data "kubectl_file_documents" "argocd" {
-    content = file("../kubernetes-argocd/manifests/argocd/install.yaml")
+    content = file("manifests/argocd/install.yaml")
 }
 
 
