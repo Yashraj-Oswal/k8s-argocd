@@ -1,22 +1,4 @@
-resource "helm_release" "ingress_nginx" {
-  name       = "ingress-nginx"
-  repository = "https://kubernetes.github.io/ingress-nginx"
-  chart      = "ingress-nginx"
-  version    = var.ingress_nginx_helm_version
-
-  namespace        = var.nginx_namespace
-  create_namespace = true
-
-  values = [file("nginx_ingress_values.yaml")]
-
-  depends_on = [
-    kind_cluster.kind-cluster,
-    kubectl_manifest.namespace,
-    kubectl_manifest.argocd
-  ]
-}
-
-resource "null_resource" "wait_for_ingress_nginx" {
+resource "null_resource" "installing_ingress_controller" {
   triggers = {
     key = uuid()
   }
@@ -24,13 +6,29 @@ resource "null_resource" "wait_for_ingress_nginx" {
   provisioner "local-exec" {
     command = <<EOF
       printf "\nWaiting for the nginx ingress controller...\n"
-      kubectl wait --namespace ${helm_release.ingress_nginx.namespace} \
-        --for=condition=ready pod \
-        --selector=app.kubernetes.io/component=controller \
-        --timeout=90s
+      helm upgrade --install ingress-nginx ingress-nginx \
+      --repo https://kubernetes.github.io/ingress-nginx \
+      --namespace ingress-nginx --create-namespace
     EOF
   }
+  depends_on = [
+    kubectl_manifest.namespace,
+    kubectl_manifest.argocd,
+    null_resource.expose_argocdsvc_to_loadbalancer
+  ]
 
-  depends_on = [helm_release.ingress_nginx]
 }
 
+data "kubectl_file_documents"  "create_ingress" {
+  content = file("manifests/argocd/ingress_expose.yaml")
+}
+
+
+resource "kubectl_manifest" "create_ingress" {
+  depends_on = [
+    null_resource.installing_ingress_controller
+  ]
+  count     = length(data.kubectl_file_documents.create_ingress.documents)
+  yaml_body = element(data.kubectl_file_documents.create_ingress.documents, count.index)
+  
+}
